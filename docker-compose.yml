@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  # Redis para Cache Aside
+  redis:
+    image: redis:7-alpine
+    container_name: scaling_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - scaling_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # RedisInsight - Dashboard para visualizar cache
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: scaling_redis_insight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis_insight_data:/data
+    networks:
+      - scaling_network
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  # PostgreSQL Master (Escrita)
+  postgres_master:
+    image: postgres:15-alpine
+    container_name: scaling_postgres_master
+    environment:
+      POSTGRES_DB: scaling_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_REPLICATION_USER: replicator
+      POSTGRES_REPLICATION_PASSWORD: replicator_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_master_data:/var/lib/postgresql/data
+      - ./scripts/postgres_master.sh:/docker-entrypoint-initdb.d/postgres_master.sh
+    networks:
+      - scaling_network
+    restart: unless-stopped
+    command: |
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c synchronous_commit=off
+      -c listen_addresses='*'
+      -c hot_standby=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Replica (Leitura)
+  postgres_replica:
+    image: postgres:15-alpine
+    container_name: scaling_postgres_replica
+    environment:
+      POSTGRES_DB: scaling_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_REPLICATION_USER: replicator
+      POSTGRES_REPLICATION_PASSWORD: replicator_password
+      PGPASSWORD: replicator_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./scripts/setup_replica.sh:/docker-entrypoint-initdb.d/setup_replica.sh
+    networks:
+      - scaling_network
+    depends_on:
+      postgres_master:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Aplicação NestJS
+  # app:
+  #   build: .
+  #   container_name: scaling_app
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - POSTGRES_MASTER_HOST=postgres_master
+  #     - POSTGRES_MASTER_PORT=5432
+  #     - POSTGRES_REPLICA_HOST=postgres_replica
+  #     - POSTGRES_REPLICA_PORT=5432
+  #     - POSTGRES_DB=scaling_db
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres_password
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     postgres_master:
+  #       condition: service_healthy
+  #     postgres_replica:
+  #       condition: service_healthy
+  #   networks:
+  #     - scaling_network
+  #   restart: unless-stopped
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+
+volumes:
+  redis_data:
+  redis_insight_data:
+  postgres_master_data:
+  postgres_replica_data:
+
+networks:
+  scaling_network:
+    driver: bridge
