@@ -153,8 +153,52 @@ docker compose ps
 # 5. Configure as variáveis de ambiente (já está criado o .env)
 # Verifique o arquivo .env na raiz do projeto
 
-# 6. Inicie a aplicação em modo desenvolvimento
+# 6. (Opcional) Execute o seed para popular o banco com dados iniciais
+npm run seed
+
+# 7. Inicie a aplicação em modo desenvolvimento
 npm run start:dev
+```
+
+### 🌱 Seed (Dados Iniciais)
+
+O projeto inclui um sistema de seed para popular o banco de dados com produtos de exemplo usando **Faker.js**.
+
+**Executar o seed:**
+
+```bash
+npm run seed
+```
+
+**O que o seed faz:**
+- Verifica quantos produtos já existem no banco
+- Cria produtos até atingir o total de 5 produtos
+- Gera dados realistas usando Faker.js (nome, descrição, preço, estoque)
+- **Invalida automaticamente o cache do Redis** após inserir os dados
+- Não duplica produtos se já existirem 5 ou mais
+
+**Exemplo de saída:**
+
+```
+🚀 Starting database seed...
+
+✅ Database connection established
+
+📊 Current products in database: 0
+🌱 Seeding 5 products...
+
+   📦 1. Sleek Metal Gloves - $517.79 (Stock: 30)
+   📦 2. Elegant Steel Shoes - $416.45 (Stock: 136)
+   📦 3. Handcrafted Cotton Bacon - $234.56 (Stock: 89)
+   📦 4. Rustic Plastic Hat - $89.99 (Stock: 45)
+   📦 5. Modern Bronze Keyboard - $678.23 (Stock: 12)
+
+✅ Successfully seeded 5 products!
+📊 Total products in database: 5
+🔄 Connecting to Redis...
+✅ Cache invalidated successfully!
+
+✅ Seed completed successfully!
 ```
 
 ### Variáveis de Ambiente
